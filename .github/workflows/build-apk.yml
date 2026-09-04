@@ -6,29 +6,63 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
+
       - uses: android-actions/setup-android@v3
+
       - name: Install Android SDK
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
+
+      - name: Fix Kotlin recursive return inference
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('app/src/main/java/com/charizard/charify/MainActivity.kt')
+          s = p.read_text()
+          replacements = {
+              'private fun setScreen(tab: Int, title: String, viewBuilder: () -> View) {': 'private fun setScreen(tab: Int, title: String, viewBuilder: () -> View): Unit {',
+              'private fun showIntro() {': 'private fun showIntro(): Unit {',
+              'private fun showPlayer() = setScreen(0, "Player") {': 'private fun showPlayer(): Unit = setScreen(0, "Player") {',
+              'private fun showSearch() = setScreen(1, "Buscar") {': 'private fun showSearch(): Unit = setScreen(1, "Buscar") {',
+              'private fun showLibrary() = setScreen(2, "Biblioteca") {': 'private fun showLibrary(): Unit = setScreen(2, "Biblioteca") {',
+              'private fun showSettings() = setScreen(3, "Config") {': 'private fun showSettings(): Unit = setScreen(3, "Config") {',
+          }
+          for old, new in replacements.items():
+              s = s.replace(old, new)
+          p.write_text(s)
+          PY
+
+          if ! git diff --quiet -- app/src/main/java/com/charizard/charify/MainActivity.kt; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add app/src/main/java/com/charizard/charify/MainActivity.kt
+            git commit -m "fix: explicit screen return types [skip ci]"
+            git push
+          fi
+
       - name: Build APK
         run: gradle --no-daemon assembleDebug
+
       - name: Prepare artifact
         run: |
           cp app/build/outputs/apk/debug/app-debug.apk Charify-v0.5.0-Stable.apk
           sha256sum Charify-v0.5.0-Stable.apk > Charify-v0.5.0-Stable.sha256
+
       - uses: actions/upload-artifact@v4
         with:
           name: Charify-v0.5.0-Stable-APK
