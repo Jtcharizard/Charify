@@ -8,6 +8,8 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.graphics.RenderEffect
+import android.graphics.Shader
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.media.MediaMetadata
@@ -15,6 +17,7 @@ import android.media.session.MediaController
 import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -30,6 +33,7 @@ import kotlin.concurrent.thread
 class MainActivity : Activity() {
     companion object {
         private const val YTM_PACKAGE = "com.google.android.apps.youtube.music"
+        private const val PICK_WALLPAPER = 7001
         private const val TEXT = Color.WHITE
         private const val MUTED = 0xFFC9CCD3.toInt()
         private const val DARK = 0xFF101216.toInt()
@@ -40,8 +44,10 @@ class MainActivity : Activity() {
     data class ThemeOption(val name: String, val subtitle: String, val image: Int, val accent: Int)
 
     private lateinit var store: LibraryStore
+    private lateinit var shell: View
     private lateinit var content: FrameLayout
     private lateinit var background: ImageView
+    private lateinit var overlayShade: View
     private lateinit var headerSubtitle: TextView
     private lateinit var miniPlayer: LinearLayout
     private lateinit var miniArt: ImageView
@@ -63,18 +69,21 @@ class MainActivity : Activity() {
     private val handler = Handler(Looper.getMainLooper())
     private val themes by lazy {
         listOf(
-            ThemeOption("Ember", "Quente, laranja e escuro", R.drawable.theme_ember, 0xFFFF8A2A.toInt()),
-            ThemeOption("Midnight", "Azul profundo e elegante", R.drawable.theme_midnight, 0xFF72A7FF.toInt()),
-            ThemeOption("Aurora", "Roxo e verde neon", R.drawable.theme_aurora, 0xFF8AE6C2.toInt()),
-            ThemeOption("Graphite", "AMOLED quase preto", R.drawable.theme_graphite, 0xFFE3E5EA.toInt()),
-            ThemeOption("Rose", "Rosa escuro e suave", R.drawable.theme_rose, 0xFFFF7AA8.toInt())
+            ThemeOption("Neon Amber", "Energia âmbar, quente e escura", R.drawable.theme_neon_amber, 0xFFFF8A2A.toInt()),
+            ThemeOption("Midnight Pulse", "Azul profundo com pulso noturno", R.drawable.theme_midnight_pulse, 0xFF6FA8FF.toInt()),
+            ThemeOption("Aurora Wave", "Verde e roxo em movimento", R.drawable.theme_aurora_wave, 0xFF72E6C0.toInt()),
+            ThemeOption("Ocean Frequency", "Azul oceano com ondas suaves", R.drawable.theme_ocean_frequency, 0xFF58C6E8.toInt()),
+            ThemeOption("Synth Glow", "Roxo neon com clima synth", R.drawable.theme_synth_glow, 0xFFE77CFF.toInt())
         )
     }
 
     private val controllerCallback = object : MediaController.Callback() {
         override fun onMetadataChanged(metadata: MediaMetadata?) = refreshMediaUi()
         override fun onPlaybackStateChanged(state: PlaybackState?) = refreshMediaUi()
-        override fun onSessionDestroyed() { controller = null; refreshMediaUi() }
+        override fun onSessionDestroyed() {
+            controller = null
+            refreshMediaUi()
+        }
     }
 
     private val progressTick = object : Runnable {
@@ -87,9 +96,11 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         store = LibraryStore(this)
+        window.navigationBarColor = 0xFF050608.toInt()
+        window.statusBarColor = 0xFF111216.toInt()
         setContentView(R.layout.activity_main)
         bindShell()
-        applyTheme()
+        applyWallpaper()
         if (store.shouldShowIntro()) showIntro() else showPlayer()
         handler.post(progressTick)
     }
@@ -98,6 +109,7 @@ class MainActivity : Activity() {
         super.onResume()
         connectToYouTubeMusic()
         refreshMediaUi()
+        applyWallpaper()
     }
 
     override fun onDestroy() {
@@ -106,8 +118,25 @@ class MainActivity : Activity() {
         super.onDestroy()
     }
 
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != PICK_WALLPAPER || resultCode != RESULT_OK) return
+        val uri = data?.data ?: return
+        try {
+            contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        } catch (_: Exception) {
+        }
+        store.saveCustomWallpaperUri(uri.toString())
+        store.saveWallpaperMode("custom")
+        applyWallpaper()
+        Toast.makeText(this, "Plano de fundo aplicado", Toast.LENGTH_SHORT).show()
+        if (currentTab == 3) showSettings()
+    }
+
     private fun bindShell() {
+        shell = findViewById(R.id.shell)
         background = findViewById(R.id.backgroundImage)
+        overlayShade = findViewById(R.id.overlayShade)
         content = findViewById(R.id.content)
         headerSubtitle = findViewById(R.id.headerSubtitle)
         miniPlayer = findViewById(R.id.miniPlayer)
@@ -115,6 +144,7 @@ class MainActivity : Activity() {
         miniTitle = findViewById(R.id.miniTitle)
         miniArtist = findViewById(R.id.miniArtist)
         miniPlay = findViewById(R.id.miniPlay)
+
         val navPlayer: Button = findViewById(R.id.navPlayer)
         val navSearch: Button = findViewById(R.id.navSearch)
         val navLibrary: Button = findViewById(R.id.navLibrary)
@@ -124,7 +154,7 @@ class MainActivity : Activity() {
         findViewById<View>(R.id.header).background = round(PANEL_SOFT, 28)
         findViewById<View>(R.id.premiumPill).background = round(0x663A3D45, 18, 0x55FFFFFF)
         miniPlayer.background = round(PANEL, 24)
-        findViewById<View>(R.id.bottomNav).background = round(0xE61A1C22.toInt(), 24)
+        findViewById<View>(R.id.bottomNav).background = round(0xF01A1C22.toInt(), 24, 0x33FFFFFF)
 
         navPlayer.setOnClickListener { showPlayer() }
         navSearch.setOnClickListener { showSearch() }
@@ -132,24 +162,62 @@ class MainActivity : Activity() {
         navSettings.setOnClickListener { showSettings() }
         miniPlayer.setOnClickListener { showPlayer() }
         miniPlay.setOnClickListener { togglePlay() }
+
+        installSafeArea()
     }
 
-    private fun activeTheme() = themes[store.themeIndex().coerceIn(0, themes.lastIndex)]
+    private fun installSafeArea() {
+        val baseLeft = dp(14)
+        val baseRight = dp(14)
+        val baseTop = dp(12)
+        val baseBottom = dp(18)
+        shell.setOnApplyWindowInsetsListener { view, insets ->
+            val left = insets.systemWindowInsetLeft
+            val right = insets.systemWindowInsetRight
+            val bottom = insets.systemWindowInsetBottom
+            view.setPadding(baseLeft + left, baseTop, baseRight + right, baseBottom + bottom)
+            insets
+        }
+        shell.requestApplyInsets()
+    }
 
-    private fun applyTheme() {
-        val theme = activeTheme()
-        background.setImageResource(theme.image)
-        headerSubtitle.text = "Tema ${theme.name} • YouTube Music com a tua cara"
+    private fun activeTheme(): ThemeOption = themes[store.themeIndex().coerceIn(0, themes.lastIndex)]
+
+    private fun applyWallpaper() {
+        val custom = store.wallpaperMode() == "custom" && store.customWallpaperUri().isNotBlank()
+        var customLoaded = false
+        if (custom) {
+            try {
+                background.setImageURI(Uri.parse(store.customWallpaperUri()))
+                customLoaded = background.drawable != null
+            } catch (_: Exception) {
+                customLoaded = false
+            }
+        }
+        if (!customLoaded) {
+            background.setImageResource(activeTheme().image)
+            if (custom) store.saveWallpaperMode("theme")
+        }
+        background.scaleType = if (store.wallpaperScale() == "fit") ImageView.ScaleType.FIT_CENTER else ImageView.ScaleType.CENTER_CROP
+
+        val darkness = store.wallpaperDarkness().coerceIn(0, 85)
+        overlayShade.setBackgroundColor(Color.argb((darkness * 255 / 100).coerceIn(0, 230), 0, 0, 0))
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val blur = store.wallpaperBlur()
+            background.setRenderEffect(if (blur > 0) RenderEffect.createBlurEffect(blur.toFloat(), blur.toFloat(), Shader.TileMode.CLAMP) else null)
+        }
+
+        headerSubtitle.text = if (customLoaded) "Plano de fundo da tua galeria" else "Tema ${activeTheme().name}"
         highlightNav()
     }
 
-    private fun setScreen(tab: Int, title: String, viewBuilder: () -> View): Unit {
+    private fun setScreen(tab: Int, builder: () -> View) {
         currentTab = tab
         introVisible = false
         content.removeAllViews()
         try {
-            val view = viewBuilder()
-            content.addView(view, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            content.addView(builder(), FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         } catch (t: Throwable) {
             val fallback = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
@@ -157,7 +225,10 @@ class MainActivity : Activity() {
                 setPadding(dp(24), dp(24), dp(24), dp(24))
                 background = round(PANEL, 28)
                 addView(text("A tela deu erro", 22f, TEXT, true).apply { gravity = Gravity.CENTER })
-                addView(text(t.message ?: t.javaClass.simpleName, 13f, MUTED).apply { gravity = Gravity.CENTER; setPadding(0, dp(10), 0, 0) })
+                addView(text(t.message ?: t.javaClass.simpleName, 13f, MUTED).apply {
+                    gravity = Gravity.CENTER
+                    setPadding(0, dp(10), 0, 0)
+                })
             }
             content.addView(fallback, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         }
@@ -165,7 +236,7 @@ class MainActivity : Activity() {
         refreshMediaUi()
     }
 
-    private fun showIntro(): Unit {
+    private fun showIntro() {
         introVisible = true
         currentTab = -1
         content.removeAllViews()
@@ -177,7 +248,7 @@ class MainActivity : Activity() {
         box.addView(card().apply {
             gravity = Gravity.CENTER_HORIZONTAL
             addView(text("Bem-vindo ao Charify", 26f, TEXT, true).apply { gravity = Gravity.CENTER })
-            addView(text("O YouTube Music continua tocando. O Charify só troca a experiência por uma interface nossa.", 14f, MUTED).apply {
+            addView(text("Tua música, teu fundo, tua interface. O YouTube Music continua tocando por trás.", 14f, MUTED).apply {
                 gravity = Gravity.CENTER
                 setPadding(dp(6), dp(10), dp(6), dp(18))
             })
@@ -186,18 +257,19 @@ class MainActivity : Activity() {
                 showPlayer()
             }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)))
         })
-        box.addView(section("Escolhe um tema"))
+        box.addView(section("Wallpapers do Charify"))
         themes.forEachIndexed { index, theme -> box.addView(themeRow(theme, index)) }
         box.addView(card().apply {
-            addView(text("O que esta versão conserta", 18f, TEXT, true))
-            addView(text("• layout nativo em XML\n• conteúdo sempre ocupa a área central\n• navegação nunca some\n• retrato e paisagem\n• sem animação que deixa a tela invisível", 14f, MUTED).apply { setPadding(0, dp(10), 0, 0) })
+            addView(text("Ou usa uma imagem tua", 18f, TEXT, true))
+            addView(text("Escolhe qualquer foto da galeria e ajusta escurecimento, blur e enquadramento depois.", 13f, MUTED).apply { setPadding(0, dp(8), 0, dp(12)) })
+            addView(primary("Escolher da galeria") { pickWallpaper() }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
         })
         scroll.addView(box)
         content.addView(scroll, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         highlightNav()
     }
 
-    private fun showPlayer(): Unit = setScreen(0, "Player") {
+    private fun showPlayer() = setScreen(0) {
         val scroll = ScrollView(this).apply { isFillViewport = true }
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -221,11 +293,17 @@ class MainActivity : Activity() {
                 clipToOutline = true
             }
             val artSize = if (resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) dp(180) else dp(250)
-            addView(playerArt, LinearLayout.LayoutParams(artSize, artSize).apply { gravity = Gravity.CENTER_HORIZONTAL; bottomMargin = dp(16) })
+            addView(playerArt, LinearLayout.LayoutParams(artSize, artSize).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                bottomMargin = dp(16)
+            })
             playerTitle = text("Nenhuma música conectada", 22f, TEXT, true).apply { gravity = Gravity.CENTER }
             playerArtist = text("Abra o YouTube Music e comece uma faixa", 14f, MUTED).apply { gravity = Gravity.CENTER }
             addView(playerTitle)
-            addView(playerArtist, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(5); bottomMargin = dp(12) })
+            addView(playerArtist, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = dp(5)
+                bottomMargin = dp(12)
+            })
             playerSeek = SeekBar(this@MainActivity).apply {
                 max = 1000
                 setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
@@ -241,7 +319,11 @@ class MainActivity : Activity() {
             playerTime = text("0:00 / 0:00", 12f, MUTED).apply { gravity = Gravity.CENTER }
             addView(playerTime)
 
-            val controls = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER; setPadding(0, dp(10), 0, 0) }
+            val controls = LinearLayout(this@MainActivity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER
+                setPadding(0, dp(10), 0, 0)
+            }
             controls.addView(control("◀") { controller?.transportControls?.skipToPrevious() }, LinearLayout.LayoutParams(0, dp(54), 1f).apply { rightMargin = dp(8) })
             playerPlay = control("▶") { togglePlay() }
             controls.addView(playerPlay, LinearLayout.LayoutParams(0, dp(54), 1f).apply { rightMargin = dp(8) })
@@ -251,7 +333,10 @@ class MainActivity : Activity() {
 
         box.addView(card().apply {
             addView(text("Ações rápidas", 18f, TEXT, true))
-            addView(primary("Abrir YouTube Music") { launchYouTubeMusic() }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(12); bottomMargin = dp(8) })
+            addView(primary("Abrir YouTube Music") { launchYouTubeMusic() }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply {
+                topMargin = dp(12)
+                bottomMargin = dp(8)
+            })
             addView(secondary("Buscar música") { showSearch() }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
         })
 
@@ -259,11 +344,16 @@ class MainActivity : Activity() {
         scroll
     }
 
-    private fun showSearch(): Unit = setScreen(1, "Buscar") {
-        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(4), dp(4), dp(4), dp(12)) }
+    private fun showSearch() = setScreen(1) {
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(4), dp(4), dp(4), dp(12))
+        }
         val query = EditText(this).apply {
             hint = "Música, artista ou álbum"
-            setTextColor(TEXT); setHintTextColor(0x99FFFFFF.toInt()); setSingleLine(true)
+            setTextColor(TEXT)
+            setHintTextColor(0x99FFFFFF.toInt())
+            setSingleLine(true)
             background = round(0xB52A2D35.toInt(), 18)
             setPadding(dp(14), dp(10), dp(14), dp(10))
         }
@@ -271,7 +361,10 @@ class MainActivity : Activity() {
         val results = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         root.addView(card().apply {
             addView(text("Buscar", 20f, TEXT, true))
-            addView(query, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50)).apply { topMargin = dp(10); bottomMargin = dp(10) })
+            addView(query, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50)).apply {
+                topMargin = dp(10)
+                bottomMargin = dp(10)
+            })
             addView(primary("Buscar") {
                 val q = query.text.toString().trim()
                 if (q.isBlank()) return@primary
@@ -303,9 +396,12 @@ class MainActivity : Activity() {
         root
     }
 
-    private fun showLibrary(): Unit = setScreen(2, "Biblioteca") {
+    private fun showLibrary() = setScreen(2) {
         val scroll = ScrollView(this)
-        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(4), dp(4), dp(4), dp(14)) }
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(4), dp(4), dp(4), dp(14))
+        }
         box.addView(section("Favoritos"))
         box.addView(card().apply {
             val fav = store.favorites()
@@ -330,30 +426,102 @@ class MainActivity : Activity() {
         scroll
     }
 
-    private fun showSettings(): Unit = setScreen(3, "Config") {
+    private fun showSettings() = setScreen(3) {
         val scroll = ScrollView(this)
-        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(4), dp(4), dp(4), dp(14)) }
-        box.addView(section("Temas"))
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(4), dp(4), dp(4), dp(14))
+        }
+
+        box.addView(section("Plano de fundo"))
+        box.addView(card().apply {
+            addView(text(if (store.wallpaperMode() == "custom") "Imagem da galeria ativa" else "Wallpaper do Charify ativo", 15f, TEXT, true))
+            addView(text("Pode usar uma imagem tua ou um dos fundos exclusivos abaixo.", 13f, MUTED).apply { setPadding(0, dp(6), 0, dp(12)) })
+            addView(primary("Escolher imagem da galeria") { pickWallpaper() }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { bottomMargin = dp(8) })
+            addView(secondary("Voltar para wallpaper do Charify") {
+                store.clearCustomWallpaper()
+                applyWallpaper()
+                showSettings()
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
+        })
+
+        box.addView(card().apply {
+            val darkLabel = text("Escurecimento: ${store.wallpaperDarkness()}%", 14f, TEXT, true)
+            addView(darkLabel)
+            val darkSeek = SeekBar(this@MainActivity).apply {
+                max = 85
+                progress = store.wallpaperDarkness()
+                setOnSeekBarChangeListener(simpleSeek { value ->
+                    store.saveWallpaperDarkness(value)
+                    darkLabel.text = "Escurecimento: $value%"
+                    applyWallpaper()
+                })
+            }
+            addView(darkSeek)
+
+            val blurLabel = text("Blur: ${store.wallpaperBlur()}", 14f, TEXT, true).apply { setPadding(0, dp(8), 0, 0) }
+            addView(blurLabel)
+            val blurSeek = SeekBar(this@MainActivity).apply {
+                max = 24
+                progress = store.wallpaperBlur()
+                isEnabled = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                setOnSeekBarChangeListener(simpleSeek { value ->
+                    store.saveWallpaperBlur(value)
+                    blurLabel.text = "Blur: $value"
+                    applyWallpaper()
+                })
+            }
+            addView(blurSeek)
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) addView(text("Blur exige Android 12 ou mais novo.", 11f, MUTED))
+
+            addView(text("Enquadramento", 14f, TEXT, true).apply { setPadding(0, dp(8), 0, dp(8)) })
+            val scaleRow = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.HORIZONTAL }
+            scaleRow.addView(if (store.wallpaperScale() == "crop") primary("Preencher") {} else secondary("Preencher") {
+                store.saveWallpaperScale("crop")
+                applyWallpaper()
+                showSettings()
+            }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { rightMargin = dp(8) })
+            scaleRow.addView(if (store.wallpaperScale() == "fit") primary("Ajustar") {} else secondary("Ajustar") {
+                store.saveWallpaperScale("fit")
+                applyWallpaper()
+                showSettings()
+            }, LinearLayout.LayoutParams(0, dp(44), 1f))
+            addView(scaleRow)
+        })
+
+        box.addView(section("Wallpapers do Charify"))
         themes.forEachIndexed { index, theme -> box.addView(themeRow(theme, index)) }
 
         box.addView(section("YouTube Data API"))
         box.addView(card().apply {
             addView(text("A chave é usada só para pesquisar. Ela fica salva localmente.", 13f, MUTED))
             val key = EditText(this@MainActivity).apply {
-                setText(store.apiKey()); hint = "Cole sua API Key"
-                setTextColor(TEXT); setHintTextColor(0x99FFFFFF.toInt()); setSingleLine(true)
+                setText(store.apiKey())
+                hint = "Cole sua API Key"
+                setTextColor(TEXT)
+                setHintTextColor(0x99FFFFFF.toInt())
+                setSingleLine(true)
                 inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
                 background = round(0xB52A2D35.toInt(), 18)
                 setPadding(dp(14), dp(10), dp(14), dp(10))
             }
-            addView(key, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50)).apply { topMargin = dp(10); bottomMargin = dp(10) })
-            addView(primary("Salvar chave") { store.saveApiKey(key.text.toString()); Toast.makeText(this@MainActivity, "Chave salva", Toast.LENGTH_SHORT).show() }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
+            addView(key, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(50)).apply {
+                topMargin = dp(10)
+                bottomMargin = dp(10)
+            })
+            addView(primary("Salvar chave") {
+                store.saveApiKey(key.text.toString())
+                Toast.makeText(this@MainActivity, "Chave salva", Toast.LENGTH_SHORT).show()
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
         })
 
         box.addView(section("Controle de mídia"))
         box.addView(card().apply {
             addView(text(if (hasNotificationAccess()) "✓ Permissão ativa" else "✕ Permissão desativada", 14f, if (hasNotificationAccess()) activeTheme().accent else MUTED, true))
-            addView(primary("Abrir permissões") { openNotificationAccess() }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply { topMargin = dp(10); bottomMargin = dp(8) })
+            addView(primary("Abrir permissões") { openNotificationAccess() }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)).apply {
+                topMargin = dp(10)
+                bottomMargin = dp(8)
+            })
             addView(secondary("Testar conexão") {
                 val ok = connectToYouTubeMusic()
                 Toast.makeText(this@MainActivity, if (ok) "YouTube Music conectado" else "Nenhuma sessão ativa", Toast.LENGTH_LONG).show()
@@ -361,49 +529,105 @@ class MainActivity : Activity() {
         })
 
         box.addView(card().apply {
-            addView(primary("Ver apresentação de novo") { store.resetIntro(); showIntro() }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
-            addView(text("Charify 0.5.0 Stable • UI reconstruída do zero", 12f, MUTED).apply { gravity = Gravity.CENTER; setPadding(0, dp(12), 0, 0) })
+            addView(primary("Ver apresentação de novo") {
+                store.resetIntro()
+                showIntro()
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)))
+            addView(text("Charify 0.7.0 • Visual Update", 12f, MUTED).apply {
+                gravity = Gravity.CENTER
+                setPadding(0, dp(12), 0, 0)
+            })
         })
+
         scroll.addView(box)
         scroll
     }
 
+    private fun pickWallpaper() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "image/*"
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+        }
+        startActivityForResult(intent, PICK_WALLPAPER)
+    }
+
+    private fun simpleSeek(onValue: (Int) -> Unit) = object : SeekBar.OnSeekBarChangeListener {
+        override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+            if (fromUser) onValue(progress)
+        }
+        override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+        override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+    }
+
     private fun songCard(song: Song): View = card().apply {
-        val row = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        val art = ImageView(this@MainActivity).apply { scaleType = ImageView.ScaleType.CENTER_CROP; background = round(0x552B2D34, 16); clipToOutline = true }
+        val row = LinearLayout(this@MainActivity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val art = ImageView(this@MainActivity).apply {
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            background = round(0x552B2D34, 16)
+            clipToOutline = true
+        }
         row.addView(art, LinearLayout.LayoutParams(dp(70), dp(70)).apply { rightMargin = dp(12) })
         val info = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.VERTICAL }
         info.addView(text(song.title, 16f, TEXT, true))
         info.addView(text(song.artist, 12f, MUTED).apply { setPadding(0, dp(4), 0, 0) })
         row.addView(info, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         addView(row)
+
         val buttons = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.HORIZONTAL }
         buttons.addView(primary("Tocar") { playSong(song) }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { rightMargin = dp(8) })
-        buttons.addView(secondary(if (store.isFavorite(song)) "♥" else "♡") { b -> (b as Button).text = if (store.toggleFavorite(song)) "♥" else "♡" }, LinearLayout.LayoutParams(dp(58), dp(44)).apply { rightMargin = dp(8) })
+        buttons.addView(secondary(if (store.isFavorite(song)) "♥" else "♡") { b ->
+            (b as Button).text = if (store.toggleFavorite(song)) "♥" else "♡"
+        }, LinearLayout.LayoutParams(dp(58), dp(44)).apply { rightMargin = dp(8) })
         buttons.addView(secondary("+") { choosePlaylist(song) }, LinearLayout.LayoutParams(dp(58), dp(44)))
         addView(buttons, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(10) })
         if (song.thumbnail.isNotBlank()) loadBitmap(song.thumbnail) { art.setImageBitmap(it) }
     }
 
     private fun compactSong(song: Song): View = LinearLayout(this).apply {
-        orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
-        background = round(0x702A2D35, 16); setPadding(dp(12), dp(10), dp(10), dp(10))
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        background = round(0x702A2D35, 16)
+        setPadding(dp(12), dp(10), dp(10), dp(10))
         val labels = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.VERTICAL }
-        labels.addView(text(song.title, 14f, TEXT, true)); labels.addView(text(song.artist, 12f, MUTED))
+        labels.addView(text(song.title, 14f, TEXT, true))
+        labels.addView(text(song.artist, 12f, MUTED))
         addView(labels, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { rightMargin = dp(8) })
         addView(secondary("▶") { playSong(song) }, LinearLayout.LayoutParams(dp(54), dp(42)))
-    }.also { it.layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(7) } }
+    }.also {
+        it.layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(7) }
+    }
 
     private fun themeRow(theme: ThemeOption, index: Int): View = card(12).apply {
-        val row = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        val preview = ImageView(this@MainActivity).apply { setImageResource(theme.image); scaleType = ImageView.ScaleType.CENTER_CROP; background = round(0x552B2D34, 16); clipToOutline = true }
-        row.addView(preview, LinearLayout.LayoutParams(dp(88), dp(70)).apply { rightMargin = dp(12) })
+        val row = LinearLayout(this@MainActivity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val preview = ImageView(this@MainActivity).apply {
+            setImageResource(theme.image)
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            background = round(0x552B2D34, 16)
+            clipToOutline = true
+        }
+        row.addView(preview, LinearLayout.LayoutParams(dp(88), dp(88)).apply { rightMargin = dp(12) })
         val labels = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.VERTICAL }
-        labels.addView(text(theme.name, 16f, TEXT, true)); labels.addView(text(theme.subtitle, 12f, MUTED).apply { setPadding(0, dp(3), 0, 0) })
+        labels.addView(text(theme.name, 16f, TEXT, true))
+        labels.addView(text(theme.subtitle, 12f, MUTED).apply { setPadding(0, dp(3), 0, 0) })
         row.addView(labels, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        val selected = store.themeIndex() == index
+        val selected = store.wallpaperMode() == "theme" && store.themeIndex() == index
         row.addView(if (selected) secondary("✓") {} else primary("Usar") {
-            store.saveThemeIndex(index); applyTheme(); if (introVisible) showIntro() else when (currentTab) { 0 -> showPlayer(); 1 -> showSearch(); 2 -> showLibrary(); else -> showSettings() }
+            store.saveThemeIndex(index)
+            store.saveWallpaperMode("theme")
+            applyWallpaper()
+            if (introVisible) showIntro() else when (currentTab) {
+                0 -> showPlayer()
+                1 -> showSearch()
+                2 -> showLibrary()
+                else -> showSettings()
+            }
         }, LinearLayout.LayoutParams(if (selected) dp(54) else dp(72), dp(44)))
         addView(row)
     }
@@ -417,22 +641,40 @@ class MainActivity : Activity() {
         try {
             if (c != null && actions and PlaybackState.ACTION_PLAY_FROM_URI != 0L) c.transportControls.playFromUri(uri, null)
             else openMusicUri(uri)
-        } catch (_: Exception) { openMusicUri(uri) }
+        } catch (_: Exception) {
+            openMusicUri(uri)
+        }
     }
 
     private fun choosePlaylist(song: Song) {
         val playlists = store.playlists()
         val names = playlists.map { it.name }.toMutableList().apply { add("+ Nova playlist") }
-        AlertDialog.Builder(this).setTitle("Adicionar à playlist").setItems(names.toTypedArray()) { _, which ->
-            if (which == names.lastIndex) promptPlaylist { store.addToPlaylist(it, song) } else store.addToPlaylist(names[which], song)
-        }.show()
+        AlertDialog.Builder(this)
+            .setTitle("Adicionar à playlist")
+            .setItems(names.toTypedArray()) { _, which ->
+                if (which == names.lastIndex) promptPlaylist { store.addToPlaylist(it, song) }
+                else store.addToPlaylist(names[which], song)
+            }
+            .show()
     }
 
     private fun promptPlaylist(done: (String) -> Unit) {
-        val input = EditText(this).apply { hint = "Nome da playlist"; setPadding(dp(12), dp(10), dp(12), dp(10)) }
-        AlertDialog.Builder(this).setTitle("Nova playlist").setView(input).setPositiveButton("Criar") { _, _ ->
-            val name = input.text.toString().trim(); if (name.isNotBlank()) { store.createPlaylist(name); done(name) }
-        }.setNegativeButton("Cancelar", null).show()
+        val input = EditText(this).apply {
+            hint = "Nome da playlist"
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Nova playlist")
+            .setView(input)
+            .setPositiveButton("Criar") { _, _ ->
+                val name = input.text.toString().trim()
+                if (name.isNotBlank()) {
+                    store.createPlaylist(name)
+                    done(name)
+                }
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
     }
 
     private fun connectToYouTubeMusic(): Boolean {
@@ -443,29 +685,43 @@ class MainActivity : Activity() {
             val candidate = manager.getActiveSessions(component).firstOrNull { it.packageName == YTM_PACKAGE }
             if (candidate != null) {
                 if (controller?.sessionToken != candidate.sessionToken) {
-                    controller?.unregisterCallback(controllerCallback); controller = candidate; controller?.registerCallback(controllerCallback)
+                    controller?.unregisterCallback(controllerCallback)
+                    controller = candidate
+                    controller?.registerCallback(controllerCallback)
                 }
-                refreshMediaUi(); true
-            } else { controller = null; refreshMediaUi(); false }
-        } catch (_: SecurityException) { false }
+                refreshMediaUi()
+                true
+            } else {
+                controller = null
+                refreshMediaUi()
+                false
+            }
+        } catch (_: SecurityException) {
+            false
+        }
     }
 
     private fun refreshMediaUi() {
         runOnUiThread {
             val meta = controller?.metadata
             val title = meta?.getString(MediaMetadata.METADATA_KEY_TITLE)
-            val artist = meta?.getString(MediaMetadata.METADATA_KEY_ARTIST) ?: meta?.getString(MediaMetadata.METADATA_KEY_ALBUM_ARTIST)
-            val art: Bitmap? = meta?.getBitmap(MediaMetadata.METADATA_KEY_ART) ?: meta?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
+            val artist = meta?.getString(MediaMetadata.METADATA_KEY_ARTIST)
+                ?: meta?.getString(MediaMetadata.METADATA_KEY_ALBUM_ARTIST)
+            val art: Bitmap? = meta?.getBitmap(MediaMetadata.METADATA_KEY_ART)
+                ?: meta?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
             val connected = !title.isNullOrBlank()
             miniPlayer.visibility = if (connected) View.VISIBLE else View.GONE
             if (connected) {
-                miniTitle.text = title; miniArtist.text = artist ?: "YouTube Music"; if (art != null) miniArt.setImageBitmap(art) else miniArt.setImageDrawable(null)
+                miniTitle.text = title
+                miniArtist.text = artist ?: "YouTube Music"
+                if (art != null) miniArt.setImageBitmap(art) else miniArt.setImageDrawable(null)
             }
             playerTitle?.text = title ?: "Nenhuma música conectada"
             playerArtist?.text = artist ?: "Abra o YouTube Music e comece uma faixa"
             if (art != null) playerArt?.setImageBitmap(art) else playerArt?.setImageDrawable(null)
             val playing = controller?.playbackState?.state == PlaybackState.STATE_PLAYING
-            miniPlay.text = if (playing) "❚❚" else "▶"; playerPlay?.text = if (playing) "❚❚" else "▶"
+            miniPlay.text = if (playing) "❚❚" else "▶"
+            playerPlay?.text = if (playing) "❚❚" else "▶"
             updateProgress()
         }
     }
@@ -475,7 +731,9 @@ class MainActivity : Activity() {
         val state = c.playbackState ?: return
         val duration = c.metadata?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L
         var pos = state.position
-        if (state.state == PlaybackState.STATE_PLAYING && state.lastPositionUpdateTime > 0) pos += ((android.os.SystemClock.elapsedRealtime() - state.lastPositionUpdateTime) * state.playbackSpeed).toLong()
+        if (state.state == PlaybackState.STATE_PLAYING && state.lastPositionUpdateTime > 0) {
+            pos += ((android.os.SystemClock.elapsedRealtime() - state.lastPositionUpdateTime) * state.playbackSpeed).toLong()
+        }
         pos = pos.coerceAtLeast(0).coerceAtMost(if (duration > 0) duration else Long.MAX_VALUE)
         if (duration > 0) playerSeek?.progress = ((pos * 1000L) / duration).toInt()
         playerTime?.text = "${formatTime(pos)} / ${formatTime(duration)}"
@@ -486,16 +744,24 @@ class MainActivity : Activity() {
         if (c.playbackState?.state == PlaybackState.STATE_PLAYING) c.transportControls.pause() else c.transportControls.play()
     }
 
-    private fun hasNotificationAccess(): Boolean = (Settings.Secure.getString(contentResolver, "enabled_notification_listeners") ?: "").contains(packageName)
+    private fun hasNotificationAccess(): Boolean =
+        (Settings.Secure.getString(contentResolver, "enabled_notification_listeners") ?: "").contains(packageName)
+
     private fun openNotificationAccess() = startActivity(Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"))
 
     private fun launchYouTubeMusic() {
-        packageManager.getLaunchIntentForPackage(YTM_PACKAGE)?.let { startActivity(it) } ?: openMusicUri(Uri.parse("https://music.youtube.com"))
+        packageManager.getLaunchIntentForPackage(YTM_PACKAGE)?.let { startActivity(it) }
+            ?: openMusicUri(Uri.parse("https://music.youtube.com"))
     }
+
     private fun openMusicSearch(q: String) = openMusicUri(Uri.parse("https://music.youtube.com/search?q=${Uri.encode(q)}"))
+
     private fun openMusicUri(uri: Uri) {
-        try { startActivity(Intent(Intent.ACTION_VIEW, uri).setPackage(YTM_PACKAGE)) }
-        catch (_: ActivityNotFoundException) { startActivity(Intent(Intent.ACTION_VIEW, uri)) }
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, uri).setPackage(YTM_PACKAGE))
+        } catch (_: ActivityNotFoundException) {
+            startActivity(Intent(Intent.ACTION_VIEW, uri))
+        }
     }
 
     private fun loadBitmap(url: String, done: (Bitmap?) -> Unit) = thread {
@@ -504,6 +770,7 @@ class MainActivity : Activity() {
     }
 
     private fun highlightNav() {
+        if (!::navButtons.isInitialized) return
         navButtons.forEachIndexed { index, button ->
             button.setTextColor(if (currentTab == index) DARK else TEXT)
             button.background = round(if (currentTab == index) activeTheme().accent else 0x00202020, 16)
@@ -512,18 +779,55 @@ class MainActivity : Activity() {
     }
 
     private fun card(padding: Int = 16) = LinearLayout(this).apply {
-        orientation = LinearLayout.VERTICAL; background = round(PANEL, 26); setPadding(dp(padding), dp(padding), dp(padding), dp(padding))
+        orientation = LinearLayout.VERTICAL
+        background = round(PANEL, 26)
+        setPadding(dp(padding), dp(padding), dp(padding), dp(padding))
         layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(10) }
     }
+
     private fun section(s: String) = text(s, 19f, TEXT, true).apply { setPadding(dp(6), dp(7), dp(6), dp(8)) }
-    private fun text(s: String, size: Float, color: Int, bold: Boolean = false) = TextView(this).apply { text = s; textSize = size; setTextColor(color); if (bold) setTypeface(typeface, Typeface.BOLD) }
-    private fun primary(s: String, click: (View) -> Unit) = Button(this).apply { text = s; isAllCaps = false; setTextColor(DARK); typeface = Typeface.DEFAULT_BOLD; background = round(activeTheme().accent, 18); setOnClickListener(click) }
-    private fun secondary(s: String, click: (View) -> Unit) = Button(this).apply { text = s; isAllCaps = false; setTextColor(TEXT); background = round(PANEL_SOFT, 18); setOnClickListener(click) }
-    private fun control(s: String, click: (View) -> Unit) = secondary(s, click).apply { textSize = 18f; typeface = Typeface.DEFAULT_BOLD }
+
+    private fun text(s: String, size: Float, color: Int, bold: Boolean = false) = TextView(this).apply {
+        text = s
+        textSize = size
+        setTextColor(color)
+        if (bold) setTypeface(typeface, Typeface.BOLD)
+    }
+
+    private fun primary(s: String, click: (View) -> Unit) = Button(this).apply {
+        text = s
+        isAllCaps = false
+        setTextColor(DARK)
+        typeface = Typeface.DEFAULT_BOLD
+        background = round(activeTheme().accent, 18)
+        setOnClickListener(click)
+    }
+
+    private fun secondary(s: String, click: (View) -> Unit) = Button(this).apply {
+        text = s
+        isAllCaps = false
+        setTextColor(TEXT)
+        background = round(PANEL_SOFT, 18)
+        setOnClickListener(click)
+    }
+
+    private fun control(s: String, click: (View) -> Unit) = secondary(s, click).apply {
+        textSize = 18f
+        typeface = Typeface.DEFAULT_BOLD
+    }
 
     private fun round(color: Int, radiusDp: Int, strokeColor: Int? = null): GradientDrawable = GradientDrawable().apply {
-        shape = GradientDrawable.RECTANGLE; cornerRadius = dp(radiusDp).toFloat(); setColor(color); if (strokeColor != null) setStroke(dp(1), strokeColor)
+        shape = GradientDrawable.RECTANGLE
+        cornerRadius = dp(radiusDp).toFloat()
+        setColor(color)
+        if (strokeColor != null) setStroke(dp(1), strokeColor)
     }
-    private fun formatTime(ms: Long): String { if (ms <= 0) return "0:00"; val s = ms / 1000; return "${s / 60}:${(s % 60).toString().padStart(2, '0')}" }
+
+    private fun formatTime(ms: Long): String {
+        if (ms <= 0) return "0:00"
+        val s = ms / 1000
+        return "${s / 60}:${(s % 60).toString().padStart(2, '0')}"
+    }
+
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 }
