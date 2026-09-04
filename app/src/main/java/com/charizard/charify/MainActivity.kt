@@ -236,7 +236,7 @@ class MainActivity : Activity() {
         refreshMediaUi()
     }
 
-    private fun showIntro() {
+    private fun showIntro(): Unit {
         introVisible = true
         currentTab = -1
         content.removeAllViews()
@@ -269,7 +269,7 @@ class MainActivity : Activity() {
         highlightNav()
     }
 
-    private fun showPlayer() = setScreen(0) {
+    private fun showPlayer(): Unit = setScreen(0) {
         val scroll = ScrollView(this).apply { isFillViewport = true }
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -344,7 +344,7 @@ class MainActivity : Activity() {
         scroll
     }
 
-    private fun showSearch() = setScreen(1) {
+    private fun showSearch(): Unit = setScreen(1) {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(4), dp(4), dp(4), dp(12))
@@ -396,7 +396,7 @@ class MainActivity : Activity() {
         root
     }
 
-    private fun showLibrary() = setScreen(2) {
+    private fun showLibrary(): Unit = setScreen(2) {
         val scroll = ScrollView(this)
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -426,7 +426,7 @@ class MainActivity : Activity() {
         scroll
     }
 
-    private fun showSettings() = setScreen(3) {
+    private fun showSettings(): Unit = setScreen(3) {
         val scroll = ScrollView(this)
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
