@@ -143,7 +143,7 @@ class MainActivity : Activity() {
         highlightNav()
     }
 
-    private fun setScreen(tab: Int, title: String, viewBuilder: () -> View) {
+    private fun setScreen(tab: Int, title: String, viewBuilder: () -> View): Unit {
         currentTab = tab
         introVisible = false
         content.removeAllViews()
@@ -165,7 +165,7 @@ class MainActivity : Activity() {
         refreshMediaUi()
     }
 
-    private fun showIntro() {
+    private fun showIntro(): Unit {
         introVisible = true
         currentTab = -1
         content.removeAllViews()
@@ -197,7 +197,7 @@ class MainActivity : Activity() {
         highlightNav()
     }
 
-    private fun showPlayer() = setScreen(0, "Player") {
+    private fun showPlayer(): Unit = setScreen(0, "Player") {
         val scroll = ScrollView(this).apply { isFillViewport = true }
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -259,7 +259,7 @@ class MainActivity : Activity() {
         scroll
     }
 
-    private fun showSearch() = setScreen(1, "Buscar") {
+    private fun showSearch(): Unit = setScreen(1, "Buscar") {
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(4), dp(4), dp(4), dp(12)) }
         val query = EditText(this).apply {
             hint = "Música, artista ou álbum"
@@ -303,7 +303,7 @@ class MainActivity : Activity() {
         root
     }
 
-    private fun showLibrary() = setScreen(2, "Biblioteca") {
+    private fun showLibrary(): Unit = setScreen(2, "Biblioteca") {
         val scroll = ScrollView(this)
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(4), dp(4), dp(4), dp(14)) }
         box.addView(section("Favoritos"))
@@ -330,7 +330,7 @@ class MainActivity : Activity() {
         scroll
     }
 
-    private fun showSettings() = setScreen(3, "Config") {
+    private fun showSettings(): Unit = setScreen(3, "Config") {
         val scroll = ScrollView(this)
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(4), dp(4), dp(4), dp(14)) }
         box.addView(section("Temas"))
