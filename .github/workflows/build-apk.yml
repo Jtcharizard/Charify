@@ -28,19 +28,18 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Fix Kotlin recursive return inference
+      - name: Keep Kotlin screen methods explicit
         run: |
           python3 - <<'PY'
           from pathlib import Path
           p = Path('app/src/main/java/com/charizard/charify/MainActivity.kt')
           s = p.read_text()
           replacements = {
-              'private fun setScreen(tab: Int, title: String, viewBuilder: () -> View) {': 'private fun setScreen(tab: Int, title: String, viewBuilder: () -> View): Unit {',
               'private fun showIntro() {': 'private fun showIntro(): Unit {',
-              'private fun showPlayer() = setScreen(0, "Player") {': 'private fun showPlayer(): Unit = setScreen(0, "Player") {',
-              'private fun showSearch() = setScreen(1, "Buscar") {': 'private fun showSearch(): Unit = setScreen(1, "Buscar") {',
-              'private fun showLibrary() = setScreen(2, "Biblioteca") {': 'private fun showLibrary(): Unit = setScreen(2, "Biblioteca") {',
-              'private fun showSettings() = setScreen(3, "Config") {': 'private fun showSettings(): Unit = setScreen(3, "Config") {',
+              'private fun showPlayer() = setScreen(0) {': 'private fun showPlayer(): Unit = setScreen(0) {',
+              'private fun showSearch() = setScreen(1) {': 'private fun showSearch(): Unit = setScreen(1) {',
+              'private fun showLibrary() = setScreen(2) {': 'private fun showLibrary(): Unit = setScreen(2) {',
+              'private fun showSettings() = setScreen(3) {': 'private fun showSettings(): Unit = setScreen(3) {',
           }
           for old, new in replacements.items():
               s = s.replace(old, new)
@@ -51,7 +50,7 @@ jobs:
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add app/src/main/java/com/charizard/charify/MainActivity.kt
-            git commit -m "fix: explicit screen return types [skip ci]"
+            git commit -m "fix: explicit v0.7 screen return types [skip ci]"
             git push
           fi
 
@@ -60,13 +59,13 @@ jobs:
 
       - name: Prepare artifact
         run: |
-          cp app/build/outputs/apk/debug/app-debug.apk Charify-v0.5.0-Stable.apk
-          sha256sum Charify-v0.5.0-Stable.apk > Charify-v0.5.0-Stable.sha256
+          cp app/build/outputs/apk/debug/app-debug.apk Charify-v0.7.0-Visual-Update.apk
+          sha256sum Charify-v0.7.0-Visual-Update.apk > Charify-v0.7.0-Visual-Update.sha256
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Charify-v0.5.0-Stable-APK
+          name: Charify-v0.7.0-Visual-Update-APK
           path: |
-            Charify-v0.5.0-Stable.apk
-            Charify-v0.5.0-Stable.sha256
+            Charify-v0.7.0-Visual-Update.apk
+            Charify-v0.7.0-Visual-Update.sha256
           retention-days: 30
