@@ -13,9 +13,25 @@ class LibraryStore(context: Context) {
     fun themeIndex(): Int = prefs.getInt("theme_index", 0)
     fun saveThemeIndex(value: Int) = prefs.edit().putInt("theme_index", value).apply()
 
-    fun shouldShowIntro(): Boolean = !prefs.getBoolean("intro_seen_v5", false)
-    fun markIntroSeen() = prefs.edit().putBoolean("intro_seen_v5", true).apply()
-    fun resetIntro() = prefs.edit().putBoolean("intro_seen_v5", false).apply()
+    fun wallpaperMode(): String = prefs.getString("wallpaper_mode", "theme") ?: "theme"
+    fun saveWallpaperMode(value: String) = prefs.edit().putString("wallpaper_mode", value).apply()
+
+    fun customWallpaperUri(): String = prefs.getString("custom_wallpaper_uri", "") ?: ""
+    fun saveCustomWallpaperUri(value: String) = prefs.edit().putString("custom_wallpaper_uri", value).apply()
+    fun clearCustomWallpaper() = prefs.edit().remove("custom_wallpaper_uri").putString("wallpaper_mode", "theme").apply()
+
+    fun wallpaperDarkness(): Int = prefs.getInt("wallpaper_darkness", 48)
+    fun saveWallpaperDarkness(value: Int) = prefs.edit().putInt("wallpaper_darkness", value.coerceIn(0, 85)).apply()
+
+    fun wallpaperBlur(): Int = prefs.getInt("wallpaper_blur", 0)
+    fun saveWallpaperBlur(value: Int) = prefs.edit().putInt("wallpaper_blur", value.coerceIn(0, 24)).apply()
+
+    fun wallpaperScale(): String = prefs.getString("wallpaper_scale", "crop") ?: "crop"
+    fun saveWallpaperScale(value: String) = prefs.edit().putString("wallpaper_scale", value).apply()
+
+    fun shouldShowIntro(): Boolean = !prefs.getBoolean("intro_seen_v7", false)
+    fun markIntroSeen() = prefs.edit().putBoolean("intro_seen_v7", true).apply()
+    fun resetIntro() = prefs.edit().putBoolean("intro_seen_v7", false).apply()
 
     fun favorites(): MutableList<Song> = readSongs("favorites")
     fun history(): MutableList<Song> = readSongs("history")
