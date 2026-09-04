@@ -10,7 +10,7 @@
         android:allowBackup="true"
         android:icon="@drawable/ic_charify_app"
         android:roundIcon="@drawable/ic_charify_app"
-        android:label="Charify"
+        android:label="Charify NEW"
         android:theme="@style/Theme.Charify"
         android:usesCleartextTraffic="false">
 
