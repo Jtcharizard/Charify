@@ -59,7 +59,7 @@
                     android:id="@+id/headerSubtitle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="YouTube Music, mas com a tua cara."
+                    android:text="v0.6 • instalação limpa"
                     android:textColor="#C9CCD3"
                     android:textSize="13sp" />
             </LinearLayout>
@@ -72,7 +72,7 @@
                 android:paddingTop="8dp"
                 android:paddingRight="12dp"
                 android:paddingBottom="8dp"
-                android:text="STABLE"
+                android:text="V0.6 NEW"
                 android:textColor="#FFFFFF"
                 android:textSize="12sp"
                 android:textStyle="bold" />
